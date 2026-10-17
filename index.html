@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>LuftM</title>
+<meta name="description" content="Find good moments to briefly air your home and cut indoor moisture.">
+<meta name="theme-color" content="#1f6f8b">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<style>
+:root{--bg:#eef2f3;--card:#fff;--ink:#14262b;--mute:#4b5f65;--line:#c9d6d9;--acc:#1f6f8b;--onacc:#fff;
+--okf:#1b5e20;--okb:#cfe9d1;--mf:#6b4500;--mb:#ffe3a8;--bf:#8c1d18;--bb:#ffdad6}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1517;--card:#162125;--ink:#e4edef;--mute:#a9bcc1;--line:#2c3d42;--acc:#7cc6df;--onacc:#06222b;
+--okf:#a5d6a7;--okb:#1b3d1f;--mf:#ffd27f;--mb:#4a3300;--bf:#ffb4ab;--bb:#601410}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
+padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1,h2{font-family:Georgia,"Iowan Old Style",serif;margin:0}
+h1{font-size:1.5rem}h2{font-size:1.15rem;margin-bottom:8px}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:14px 0}
+.mute,small{color:var(--mute)}small{display:block;font-size:.85rem}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:8px}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--acc);color:var(--onacc);border:0;border-radius:8px;padding:10px 14px;cursor:pointer;min-height:44px}
+button.alt{background:transparent;color:var(--acc);border:1px solid var(--acc)}
+button:disabled{opacity:.5}
+:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+label{display:block;margin:10px 0 2px;font-weight:600}
+input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);min-height:44px}
+.row{display:flex;justify-content:space-between;gap:12px;padding:3px 0}
+.hero{font-family:Georgia,serif;font-size:2rem;line-height:1.15;margin:4px 0}
+.strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:4px;margin:8px 0}
+.pane{border-radius:6px;padding:4px 2px;text-align:center;font-size:.75rem;line-height:1.25}
+.pane b{display:block;font-size:.8rem}
+.F{background:var(--okb);color:var(--okf)}.U{background:var(--mb);color:var(--mf)}.X{background:var(--bb);color:var(--bf)}
+.err{color:var(--bf);font-weight:600}
+a{color:var(--acc)}ul{padding-left:20px;margin:6px 0}
+details{margin:8px 0}summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center}
+.res button{display:block;width:100%;text-align:left;margin:4px 0}
+</style>
+</head>
+<body>
+<main>
+<div class="bar"><h1>LuftM</h1><button id="refresh" class="alt">Refresh weather</button></div>
+<p id="status" class="mute" aria-live="polite"></p>
+
+<section id="place"><h2>Location</h2><div id="placeNow"></div>
+<div class="bar" style="margin-top:8px"><button id="geo">Use my location</button></div>
+<label for="q">Search city or postcode</label>
+<div class="bar"><input id="q" type="search" autocomplete="off"><button id="go" class="alt">Search</button></div>
+<div id="results" class="res"></div></section>
+
+<section id="next" aria-live="polite"></section>
+<section id="strip"></section>
+<section id="now"></section>
+<section id="cond"></section>
+
+<section><h2>Your home</h2>
+<details open><summary>Indoor conditions</summary>
+<label for="ti">Indoor temperature (°C)</label><input id="ti" inputmode="decimal">
+<label for="rh">Indoor relative humidity (%)</label><input id="rh" inputmode="decimal">
+<label for="sf">Coldest surface temperature (°C, optional)</label><input id="sf" inputmode="decimal">
+<small>Measure with a surface or infrared thermometer. Leave blank if unknown.</small>
+<p><button id="saveIn">Save indoor conditions</button> <button id="resetIn" class="alt">Reset to examples</button></p><p id="inErr" class="err"></p></details>
+<details><summary>Ventilation preferences</summary>
+<label for="vol">Room volume (m³)</label><input id="vol" inputmode="decimal">
+<label for="ex">Air exchange during an airing (assumed)</label>
+<select id="ex"><option value="0.25">Window slightly open, about 25% of room air</option><option value="0.5">Window wide open, about 50%</option><option value="1">Cross-ventilation, about 100%</option></select>
+<label for="dur">Suggested airing (minutes, 5 to 15)</label><input id="dur" inputmode="numeric">
+<label for="ps">Preferred hours: from (0 to 23, blank = any)</label><input id="ps" inputmode="numeric">
+<label for="pe">Preferred hours: until</label><input id="pe" inputmode="numeric">
+<label for="pr">Energy price per kWh (optional)</label><input id="pr" inputmode="decimal">
+<p><button id="savePf">Save preferences</button></p><p id="pfErr" class="err"></p></details>
+</section>
+
+<section><h2>How it works</h2>
+<p>Relative humidity changes with temperature, so LuftM compares <b>dew points</b>, which measure the actual water vapour. If outdoor air’s dew point is at least 2 °C below your indoor dew point, swapping some air can dry the room. Heat figures count only the air you replace, using Q = 1.2 × V × 1005 × ΔT. Warmed-air humidity is a theoretical estimate, not a prediction of your room. Condensation is judged only from a surface temperature you measure.</p></section>
+
+<section><h2>About</h2>
+<p><small>Advice is indicative. It cannot guarantee that condensation or mould is prevented, and is no substitute for heating, proper ventilation, or fixing leaks and rising damp. You decide when to open windows.</small></p>
+<p><small>Everything stays on your device. Only the place coordinates or search text go to Open-Meteo. <a href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a> (<a href="https://open-meteo.com/en/license" target="_blank" rel="noopener">licence</a>).</small></p></section>
+</main>
+<script>
+const A=17.62,B=243.12,H=3.6e6,$=s=>document.getElementById(s);
+const okT=t=>Number.isFinite(t)&&t>=-40&&t<=60,okR=r=>Number.isFinite(r)&&r>0&&r<=100;
+const dew=(t,r)=>{const g=Math.log(r/100)+A*t/(B+t);return B*g/(A-g)};
+const es=t=>6.112*Math.exp(A*t/(B+t));
+const rhW=(td,t)=>Math.min(100,100*es(td)/es(t));
+const heat=(v,ti,to)=>ti>to?1.2*v*1005*(ti-to)/3.6e6:0;
+const cl=(x,a,b)=>Math.min(b,Math.max(a,x)),f1=x=>x.toFixed(1),f0=x=>x.toFixed(0),f2=x=>x.toFixed(2);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const tm=ms=>new Date(ms).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+const day=(ms,now)=>new Date(ms).toDateString()===new Date(now).toDateString()?'Today':'Tomorrow';
+const num=v=>{v=String(v).trim().replace(',','.');return v===''?null:Number(v)};
+const T={margin:2,strong:5,heatRef:.5,stale:3*H};
+const load=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
+let S=Object.assign({ti:20,rh:60,entered:false,sf:null,vol:36,ex:.5,dur:7,ps:null,pe:null,pr:null,place:null},load('luftm.s',{}));
+let F=load('luftm.f',null),busy=false,err='';
+
+function plan(now=Date.now()){
+  if(!S.place)return{why:'Choose a location to get a forecast.'};
+  if(!F||Math.abs(F.lat-S.place.lat)>.001||Math.abs(F.lon-S.place.lon)>.001)return{why:'No forecast downloaded yet.'};
+  if(!okT(S.ti)||!okR(S.rh))return{why:'Indoor temperature or humidity is outside the valid range.'};
+  const id=dew(S.ti,S.rh),age=Math.max(0,now-F.at),stale=age>T.stale,hs=[];let skipped=0;
+  for(const h of F.hours.filter(h=>h.t+H>now&&h.t<now+24*H).sort((a,b)=>a.t-b.t)){
+    if(!okT(h.T)){skipped++;continue}
+    let d=h.D,der=false;
+    if(!okT(d)||d>h.T+.5){d=okR(h.R)?dew(h.T,h.R):null;der=true}
+    if(d==null){skipped++;continue}
+    const diff=id-d,out=diff>=T.margin-1e-9?'F':diff<=-T.margin+1e-9?'X':'U';
+    const kwh=heat(S.vol*S.ex,S.ti,h.T),hr=new Date(h.t).getHours();
+    const usePref=S.ps!=null&&S.pe!=null,inP=!usePref||(S.ps===S.pe||(S.ps<S.pe?hr>=S.ps&&hr<S.pe:hr>=S.ps||hr<S.pe));
+    const sc=out==='F'?100*(.55*cl(diff/10,0,1)+.2*(1-cl(kwh/T.heatRef,0,1))+.1*cl((h.T+5)/15,0,1)+.15*(usePref?(inP?1:0):.5)):0;
+    hs.push({t:h.t,T:h.T,d,der,diff,out,kwh,rh:rhW(d,S.ti),sc});
+  }
+  if(!hs.length)return{why:'The forecast has no usable data for the next 24 hours.'};
+  const ws=[];let cur=null;
+  for(const h of hs){if(h.out!=='F'){cur=null;continue}
+    if(cur&&h.t===cur.hs[cur.hs.length-1].t+H)cur.hs.push(h);else{cur={hs:[h]};ws.push(cur)}}
+  for(const w of ws){w.start=w.hs[0].t;w.end=w.hs.at(-1).t+H;w.sc=w.hs.reduce((a,h)=>a+h.sc,0)/w.hs.length;
+    w.best=w.hs.reduce((a,h)=>h.sc>a.sc?h:a);w.avg=w.hs.reduce((a,h)=>a+h.diff,0)/w.hs.length;
+    w.ben=w.avg>=T.strong?'Strong':'Moderate'}
+  ws.sort((a,b)=>b.sc-a.sc||a.start-b.start);
+  return{id,hs,ws,stale,age:Math.round(age/6e4),skipped,conf:S.entered&&!stale&&!skipped?'Moderate':'Lower'};
+}
+
+function render(){
+  const now=Date.now(),p=plan(now);
+  $('placeNow').innerHTML=S.place?`<b>${esc(S.place.name)}</b>`:'<span class="mute">No location chosen yet.</span>';
+  $('status').innerHTML=(busy?'Refreshing… ':'')+(F?`Forecast updated ${tm(F.at)}${p.stale?' <b class="err">(out of date, refresh before relying on it)</b>':''}. `:'')+(err?`<span class="err">${esc(err)}</span>`:'');
+  const n=$('next');
+  if(!p.hs){n.innerHTML=`<h2>Next ventilation opportunity</h2><p>${esc(p.why)}</p>`}
+  else{const w=p.ws[0];let h='<h2>Next ventilation opportunity</h2>';
+    if(!w)h+='<p class="hero">No good window in the next 24 hours</p><p>Outdoor air isn’t forecast to be meaningfully drier than your indoor air, so airing is unlikely to help dry your home.</p>';
+    else{const b=w.best;
+      h+=`<p class="hero">${day(w.start,now)} ${tm(w.start)}–${tm(w.end)}</p><p>Best hour ${tm(b.t)}. Suggested brief airing: about ${S.dur} minutes. Forecasts are hourly, so treat this as an indication, not a minute-accurate schedule.</p>
+      <div class="row"><span>Drying benefit</span><b>${w.ben}</b></div>
+      <div class="row"><span>Indoor / outdoor dew point</span><b>${f1(p.id)}°C / ${f1(b.d)}°C</b></div>
+      <div class="row"><span>Heat to warm replacement air</span><b>≈ ${f2(b.kwh)} kWh</b></div>
+      ${S.pr&&b.kwh>0?`<small>Illustrative cost ≈ ${f2(b.kwh*S.pr)} (not your total heating cost).</small>`:''}
+      <p>Outdoor air is forecast to hold less water vapour (dew point ${f1(b.diff)}°C lower). Warmed to ${f1(S.ti)}°C it would be roughly ${f0(b.rh)}% RH, a theoretical estimate only. ${b.kwh>0?`Replacing about ${f0(S.ex*100)}% of the room’s air (an assumption) needs roughly ${f2(b.kwh)} kWh.`:'Outdoor air isn’t colder than indoors, so little extra heating is expected.'}</p>`;
+      if(p.ws.length>1)h+='<small>Other windows: '+p.ws.slice(1,4).map(x=>`${day(x.start,now)} ${tm(x.start)}–${tm(x.end)}`).join('; ')+'</small>'}
+    h+=`<small>Confidence: ${p.conf}.${S.entered?'':' Your indoor values are examples, not measurements, so this is less certain.'}${p.skipped?` ${p.skipped} forecast hour(s) skipped (missing data).`:''} Check room conditions before opening a window.</small>`;
+    n.innerHTML=h}
+  $('strip').innerHTML=p.hs?`<h2>Next 24 hours</h2><div class="strip" role="list">${p.hs.map(h=>`<div class="pane ${h.out}" role="listitem" title="Dew ${f1(h.d)}°C, ${f0(h.rh)}% RH when warmed, ${f2(h.kwh)} kWh"><b>${tm(h.t)}</b>${{F:'✓ good',U:'~ unsure',X:'✕ no'}[h.out]}<br>${f0(h.T)}°C</div>`).join('')}</div><small>✓ favourable, ~ uncertain, ✕ unfavourable, judged by dew-point difference, not outdoor humidity alone.</small>`:'';
+  const cur=F&&F.hours.filter(h=>h.t<=now).pop(),od=cur&&(okT(cur.D)?cur.D:okR(cur.R)&&okT(cur.T)?dew(cur.T,cur.R):null);
+  const idw=okT(S.ti)&&okR(S.rh)?dew(S.ti,S.rh):null;
+  $('now').innerHTML=`<h2>Current conditions</h2><div class="row"><span>Outdoor (forecast model)</span><b>${cur&&okT(cur.T)?f1(cur.T)+'°C':'—'} · ${cur&&cur.R!=null?f0(cur.R)+'%':'—'} · dew ${od!=null?f1(od)+'°C':'—'}</b></div>
+   <div class="row"><span>Indoor ${S.entered?'(entered by you)':'(EXAMPLE values)'}</span><b>${f1(S.ti)}°C · ${f0(S.rh)}% · dew ${idw!=null?f1(idw)+'°C':'—'}</b></div>`;
+  let cm='Surface-condensation risk can’t be determined without a measured cold-surface temperature. LuftM never estimates wall temperature from the weather.';
+  if(idw!=null&&S.sf!=null)cm=S.sf<=idw?`The cold surface (${f1(S.sf)}°C) is at or below the indoor dew point (${f1(idw)}°C), so condensation may occur on it.`:`The cold surface (${f1(S.sf)}°C) is above the indoor dew point (${f1(idw)}°C), so condensation is less likely there. Mould and other moisture risks are not ruled out.`;
+  $('cond').innerHTML=`<h2>Condensation awareness</h2><p>${cm}</p>`;
+}
+
+async function getJSON(u){const r=await fetch(u);if(!r.ok)throw new Error('The weather service returned an error (HTTP '+r.status+').');return r.json()}
+async function refresh(){
+  if(!S.place){err='Choose a location first.';return render()}
+  if(busy)return;busy=true;err='';render();
+  try{
+    const j=await getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${S.place.lat}&longitude=${S.place.lon}&hourly=temperature_2m,relative_humidity_2m,dew_point_2m&timezone=auto&forecast_days=2`);
+    const h=j.hourly;if(!h||!h.time||!h.time.length)throw new Error('The weather service returned no hourly data.');
+    const off=(j.utc_offset_seconds||0)*1000;
+    const hours=h.time.map((s,i)=>({t:Date.parse(s+':00Z')-off,T:h.temperature_2m[i],R:h.relative_humidity_2m[i],D:h.dew_point_2m[i]})).filter(x=>Number.isFinite(x.t));
+    F={lat:S.place.lat,lon:S.place.lon,at:Date.now(),hours};save('luftm.f',F);
+  }catch(e){err=e instanceof TypeError?'Can’t reach the weather service. Check your connection. Showing the last forecast, if any.':e.message}
+  busy=false;render();
+}
+function setPlace(p){S.place=p;save('luftm.s',S);$('results').innerHTML='';refresh()}
+$('geo').onclick=()=>{
+  if(!navigator.geolocation){err='This browser has no location support. Search for a place instead.';return render()}
+  err='Finding your location…';render();
+  navigator.geolocation.getCurrentPosition(
+    p=>setPlace({name:'My location (approximate)',lat:Math.round(p.coords.latitude*100)/100,lon:Math.round(p.coords.longitude*100)/100}),
+    e=>{err=e.code===1?'Location permission was denied. Search for a city or postcode instead.':'Couldn’t get your location. Try again or search instead.';render()},
+    {timeout:15000,maximumAge:600000});
+};
+async function search(){
+  const q=$('q').value.trim();if(q.length<2)return;
+  try{const j=await getJSON('https://geocoding-api.open-meteo.com/v1/search?count=6&language=en&format=json&name='+encodeURIComponent(q));
+    const r=j.results||[];$('results').innerHTML=r.length?'':'<small class="err">No places found. Try another spelling.</small>';
+    r.forEach(x=>{const b=document.createElement('button');b.className='alt';b.textContent=[x.name,x.admin1,x.country].filter(Boolean).join(', ');
+      b.onclick=()=>setPlace({name:b.textContent,lat:x.latitude,lon:x.longitude});$('results').appendChild(b)});
+  }catch(e){$('results').innerHTML=`<small class="err">${esc(e instanceof TypeError?'Can’t reach the search service. Check your connection.':e.message)}</small>`}
+}
+$('go').onclick=search;$('q').onkeydown=e=>{if(e.key==='Enter')search()};$('refresh').onclick=refresh;
+
+function fill(){$('ti').value=S.ti;$('rh').value=S.rh;$('sf').value=S.sf??'';$('vol').value=S.vol;$('ex').value=S.ex;$('dur').value=S.dur;$('ps').value=S.ps??'';$('pe').value=S.pe??'';$('pr').value=S.pr??''}
+$('saveIn').onclick=()=>{const t=num($('ti').value),r=num($('rh').value),s=num($('sf').value);
+  const e=!(t>=-10&&t<=40)?'Temperature must be -10 to 40 °C.':!(r>=1&&r<=100)?'Humidity must be 1 to 100 %.':(s!=null&&!(s>=-20&&s<=40))?'Surface temperature must be -20 to 40 °C, or blank.':'';
+  $('inErr').textContent=e;if(e)return;Object.assign(S,{ti:t,rh:r,sf:s,entered:true});save('luftm.s',S);render()};
+$('resetIn').onclick=()=>{Object.assign(S,{ti:20,rh:60,sf:null,entered:false});save('luftm.s',S);fill();render()};
+$('savePf').onclick=()=>{const v=num($('vol').value),d=num($('dur').value),a=num($('ps').value),b=num($('pe').value),p=num($('pr').value);
+  const hr=x=>x==null||(Number.isInteger(x)&&x>=0&&x<=23);
+  const e=!(v>=5&&v<=500)?'Room volume must be 5 to 500 m³.':!(d>=5&&d<=15)?'Airing must be 5 to 15 minutes.':!(hr(a)&&hr(b)&&(a==null)===(b==null))?'Enter both preferred hours (0 to 23), or leave both blank.':(p!=null&&!(p>=0))?'Price must be 0 or more.':'';
+  $('pfErr').textContent=e;if(e)return;Object.assign(S,{vol:v,ex:Number($('ex').value),dur:Math.round(d),ps:a,pe:b,pr:p});save('luftm.s',S);render()};
+
+fill();render();
+if(S.place&&(!F||Date.now()-F.at>30*6e4))refresh();
+setInterval(render,6e4);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){render();if(S.place&&(!F||Date.now()-F.at>30*6e4))refresh()}});
+if('serviceWorker'in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script>
+</body>
+</html>
